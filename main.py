@@ -12,7 +12,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# اجازه دریافت سفارش از سایت Flash_birjand
+
+# اجازه اتصال سایت فلش بیرجند
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +24,7 @@ app.add_middleware(
 
 
 # =========================
-# تنظیمات از Environment
+# تنظیمات
 # =========================
 
 RUBIKA_TOKEN = os.getenv("RUBIKA_TOKEN", "")
@@ -57,14 +58,16 @@ async def home():
 
 
 # =========================
-# Health Check
+# بررسی وضعیت
 # =========================
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "rubika_configured": bool(RUBIKA_TOKEN and RUBIKA_CHAT_ID)
+        "rubika_configured": bool(
+            RUBIKA_TOKEN and RUBIKA_CHAT_ID
+        )
     }
 
 
@@ -93,16 +96,26 @@ async def send_to_rubika(message: str):
         "text": message
     }
 
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(url, json=payload)
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                url,
+                json=payload
+            )
 
-    if response.status_code >= 400:
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail="ارسال پیام به روبیکا ناموفق بود."
+            )
+
+        return response.json()
+
+    except httpx.RequestError:
         raise HTTPException(
             status_code=502,
-            detail="ارسال پیام به روبیکا ناموفق بود."
+            detail="ارتباط با سرور روبیکا برقرار نشد."
         )
-
-    return response.json()
 
 
 # =========================
@@ -112,27 +125,17 @@ async def send_to_rubika(message: str):
 @app.post("/orders")
 async def create_order(order: Order):
 
-    message = f"""
-🛍️ سفارش جدید — فلش بیرجند
-
-👤 نام مشتری:
-{order.name}
-
-📞 شماره تماس:
-{order.phone}
-
-💾 محصول:
-{order.product}
-
-🔢 تعداد:
-{order.quantity}
-
-📝 توضیحات:
-{order.description or "بدون توضیحات"}
-
-━━━━━━━━━━━━━━
-🌐 ثبت شده از سایت فلش بیرجند
-"""
+    message = (
+        "🛍️ سفارش جدید — فلش بیرجند\n\n"
+        f"👤 نام مشتری:\n{order.name}\n\n"
+        f"📞 شماره تماس:\n{order.phone}\n\n"
+        f"💾 محصول:\n{order.product}\n\n"
+        f"🔢 تعداد:\n{order.quantity}\n\n"
+        f"📝 توضیحات:\n"
+        f"{order.description or 'بدون توضیحات'}\n\n"
+        "━━━━━━━━━━━━━━\n"
+        "🌐 ثبت شده از سایت فلش بیرجند"
+    )
 
     await send_to_rubika(message)
 
